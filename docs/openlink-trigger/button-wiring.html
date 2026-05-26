@@ -1,0 +1,29 @@
+<!--
+  button-wiring.html
+  ------------------------------------------------------------------
+  Example showing how to wire a button to window.openLink().
+  Assumes the inline script from openlink-inline.html is already in
+  the page <head>.
+
+  Pattern: stash the URL on a data-attribute, intercept the click,
+  call window.openLink(url). Never use <a href target="_blank"> or
+  window.open() inside a sandboxed widget iframe — both are blocked.
+-->
+
+<button id="view-on-airbnb"
+        data-url="https://www.airbnb.com/rooms/694262078158269375?guests=1&adults=1">
+  View on Airbnb
+</button>
+
+<script>
+  document.getElementById("view-on-airbnb").addEventListener("click", async (e) => {
+    const url = e.currentTarget.dataset.url;
+    try {
+      await window.openLink(url);
+      // user clicked "Open link" in Claude's modal
+    } catch (err) {
+      // user clicked "Cancel", or the host rejected
+      console.log("openLink cancelled:", err);
+    }
+  });
+</script>

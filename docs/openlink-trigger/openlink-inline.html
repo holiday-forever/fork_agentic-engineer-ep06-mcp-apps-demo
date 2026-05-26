@@ -1,0 +1,77 @@
+<!--
+  openlink-inline.html
+  ------------------------------------------------------------------
+  Drop-in trigger script for MCP App widgets running inside Claude
+  Desktop. Paste the entire <script> block below into the <head> of
+  your widget's HTML.
+
+  After it loads, call window.openLink(url) from any event handler
+  to make Claude Desktop show its "You're leaving Claude to visit an
+  external link" confirmation dialog.
+
+  Returns a Promise:
+    - resolves when the user clicks "Open link"
+    - rejects  when the user clicks "Cancel" (or on timeout)
+
+  IMPORTANT: must be inline. Claude Desktop's CSP blocks third-party
+  script-src. 'unsafe-inline' is allowed.
+-->
+<script>
+(() => {
+  const PROTOCOL = "2026-01-26";
+  let nextId = 1;
+  const pending = new Map();
+  let hostCapabilities = null;
+
+  // --- transport ---------------------------------------------------------
+  const send = (msg) => window.parent.postMessage(msg, "*");
+
+  const rpc = (method, params, timeoutMs = 15000) =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      const timer = setTimeout(() => {
+        if (pending.has(id)) { pending.delete(id); reject(new Error(method + " timeout")); }
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject:  (e) => { clearTimeout(timer); reject(e);  },
+      });
+      send({ jsonrpc: "2.0", id, method, params });
+    });
+
+  window.addEventListener("message", (e) => {
+    const m = e.data;
+    if (m && typeof m.id === "number" && pending.has(m.id)) {
+      const p = pending.get(m.id); pending.delete(m.id);
+      m.error ? p.reject(m.error) : p.resolve(m.result);
+    }
+  });
+
+  // --- handshake (REQUIRED — host won't process ui/openLink before this) -
+  (async () => {
+    try {
+      const init = await rpc("ui/initialize", {
+        protocolVersion: PROTOCOL,
+        appInfo: { name: "my-widget", version: "0.1.0" },
+        appCapabilities: {},
+      }, 2000);
+      hostCapabilities = init?.hostCapabilities ?? null;
+      send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      send({ type: "ui-lifecycle-iframe-ready" });
+    } catch (err) {
+      console.error("[widget] ui/initialize failed:", err);
+    }
+  })();
+
+  // --- the actual trigger ------------------------------------------------
+  // Calling this asks the host (Claude Desktop) to open `url`.
+  // Claude Desktop responds by rendering the "You're leaving Claude" modal.
+  // If the user clicks "Open link", the promise resolves; "Cancel" rejects.
+  window.openLink = (url) => {
+    if (hostCapabilities && !hostCapabilities.openLinks) {
+      console.warn("[widget] host did not advertise openLinks capability");
+    }
+    return rpc("ui/openLink", { url }, 60000);
+  };
+})();
+</script>
