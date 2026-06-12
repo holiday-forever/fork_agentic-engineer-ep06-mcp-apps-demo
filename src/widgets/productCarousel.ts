@@ -9,8 +9,11 @@ export function productCarouselHtml(products: Product[], query: string): string 
   const cards = products
     .map((p) => {
       const img = productImage(p.id);
+      // background-size and background-position are included inline so the
+      // card renders correctly even if the <style> block fails to apply
+      // (e.g. CSP stripping, truncated response, class name collision).
       const thumb = img
-        ? `<div class="thumb" style="background-image: url('${img}');"></div>`
+        ? `<div class="thumb" style="background-image: url('${img}'); background-size: cover; background-position: center;"></div>`
         : `<div class="thumb fallback" style="background: linear-gradient(135deg, ${p.color}cc, ${p.color}55);"></div>`;
       return `
     <article class="card">

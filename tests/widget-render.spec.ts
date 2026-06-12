@@ -122,6 +122,32 @@ async function renderCarousel(page: Page, html: string) {
   await page.setContent(html, { waitUntil: "domcontentloaded" });
 }
 
+/**
+ * Assert that every product thumbnail in the carousel displays a photo
+ * (a base64 data-URI background-image) rather than the gradient fallback.
+ *
+ * Catches regressions where productImage() returns null — e.g. missing
+ * image files, wrong imagesDir path, readFileSync failure — which would
+ * silently replace photos with colour gradients and pass all text-only
+ * assertions.
+ */
+async function assertThumbnailImages(page: Page) {
+  // .thumb elements without .fallback are the ones that should have a photo.
+  const thumbs = page.locator(".thumb:not(.fallback)");
+  const count = await thumbs.count();
+  expect(count, "expected at least one photo thumbnail").toBeGreaterThan(0);
+
+  for (let i = 0; i < count; i++) {
+    const bgImage = await thumbs.nth(i).evaluate(
+      (el) => window.getComputedStyle(el).backgroundImage,
+    );
+    expect(
+      bgImage,
+      `thumbnail ${i} has backgroundImage "${bgImage}" — expected a data-URI photo, got gradient fallback`,
+    ).toMatch(/^url\("data:image\//);
+  }
+}
+
 test.describe("storefront MCP Apps server — widget rendering", () => {
   let host: McpStdioHost;
 
@@ -157,6 +183,9 @@ test.describe("storefront MCP Apps server — widget rendering", () => {
     await expect(page.locator("body")).not.toContainText("Sunrise 7");
     await expect(page.locator("body")).not.toContainText("Speed Lite Black");
 
+    // Verify product photos render (data-URI background-image, not gradient fallback)
+    await assertThumbnailImages(page);
+
     await page.screenshot({ path: testInfo.outputPath("budget-carousel.png") });
     await browser.close();
   });
@@ -182,6 +211,9 @@ test.describe("storefront MCP Apps server — widget rendering", () => {
     await expect(page.locator("body")).not.toContainText("Trail Runner");
     await expect(page.locator("body")).not.toContainText("Cloud Marathon");
     await expect(page.locator("body")).not.toContainText("Urban Step");
+
+    // Verify product photos render (data-URI background-image, not gradient fallback)
+    await assertThumbnailImages(page);
 
     await page.screenshot({ path: testInfo.outputPath("premium-carousel.png") });
     await browser.close();
