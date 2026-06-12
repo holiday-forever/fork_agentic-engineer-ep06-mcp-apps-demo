@@ -21,11 +21,18 @@ export function productImage(id: string): string | null {
   for (const { ext, mime } of FORMATS) {
     const file = path.join(imagesDir, `${id}${ext}`);
     if (!fs.existsSync(file)) continue;
-    const buf = fs.readFileSync(file);
-    const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
-    cache.set(id, dataUri);
-    return dataUri;
+    try {
+      const buf = fs.readFileSync(file);
+      const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
+      cache.set(id, dataUri);
+      return dataUri;
+    } catch (err) {
+      console.error(`[productImages] Failed to read "${file}":`, err);
+    }
   }
+  console.warn(
+    `[productImages] No image found for product "${id}" in ${imagesDir} — gradient fallback will be shown.`,
+  );
   cache.set(id, null);
   return null;
 }
